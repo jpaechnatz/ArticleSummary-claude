@@ -73,18 +73,23 @@ async function summarizeButtonClick(target) {
       }
     });
 
+    console.log('PHP Response:', response);
     const xresp = response.data;
+    console.log('Parsed Response:', xresp);
 
     if (response.status !== 200 || !xresp.response || !xresp.response.data) {
-      throw new Error('Request Failed');
+      console.error('Invalid response structure:', xresp);
+      throw new Error('Request Failed: Invalid response structure');
     }
 
     if (xresp.response.error) {
+      console.error('Configuration error:', xresp.response.data);
       setOaiState(container, 2, xresp.response.data, null);
     } else {
       // Parse parameters returned by PHP
       const oaiParams = xresp.response.data;
       const oaiProvider = xresp.response.provider;
+      console.log('Provider:', oaiProvider, 'Params:', oaiParams);
       if (oaiProvider === 'openai') {
         await sendOpenAIRequest(container, oaiParams);
       } else {
@@ -92,8 +97,16 @@ async function summarizeButtonClick(target) {
       }
     }
   } catch (error) {
-    console.error(error);
-    setOaiState(container, 2, 'Request Failed', null);
+    console.error('Full error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error response:', error.response);
+    let errorMsg = 'Request Failed';
+    if (error.response) {
+      errorMsg += ': ' + (error.response.statusText || error.response.status);
+    } else if (error.message) {
+      errorMsg += ': ' + error.message;
+    }
+    setOaiState(container, 2, errorMsg, null);
   }
 }
 
@@ -104,6 +117,9 @@ async function sendOpenAIRequest(container, oaiParams) {
     delete body['oai_key'];
     body.stream = true; // Enable streaming
 
+    console.log('Sending request to:', oaiParams.oai_url);
+    console.log('Request body:', body);
+
     const response = await fetch(oaiParams.oai_url, {
       method: 'POST',
       headers: {
@@ -113,8 +129,12 @@ async function sendOpenAIRequest(container, oaiParams) {
       body: JSON.stringify(body)
     });
 
+    console.log('API Response status:', response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error('Request Failed');
+      const errorText = await response.text();
+      console.error('API Error Response:', errorText);
+      throw new Error('API Request Failed: ' + response.status + ' ' + errorText.substring(0, 100));
     }
 
     const reader = response.body.getReader();
@@ -159,8 +179,12 @@ async function sendOpenAIRequest(container, oaiParams) {
       }
     }
   } catch (error) {
-    console.error(error);
-    setOaiState(container, 2, 'Request Failed', null);
+    console.error('OpenAI/Mistral API Error:', error);
+    let errorMsg = 'API Request Failed';
+    if (error.message) {
+      errorMsg = error.message;
+    }
+    setOaiState(container, 2, errorMsg, null);
   }
 }
 
@@ -171,6 +195,9 @@ async function sendOllamaRequest(container, oaiParams){
     delete body['oai_url'];
     delete body['oai_key'];
 
+    console.log('Sending Ollama request to:', oaiParams.oai_url);
+    console.log('Request body:', body);
+
     const response = await fetch(oaiParams.oai_url, {
       method: 'POST',
       headers: {
@@ -180,8 +207,12 @@ async function sendOllamaRequest(container, oaiParams){
       body: JSON.stringify(body)
     });
 
+    console.log('Ollama Response status:', response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error('Request Failed');
+      const errorText = await response.text();
+      console.error('Ollama Error Response:', errorText);
+      throw new Error('Ollama Request Failed: ' + response.status + ' ' + errorText.substring(0, 100));
     }
 
     const reader = response.body.getReader();
@@ -215,7 +246,11 @@ async function sendOllamaRequest(container, oaiParams){
       }
     }
   } catch (error) {
-    console.error(error);
-    setOaiState(container, 2, 'Request Failed', null);
+    console.error('Ollama API Error:', error);
+    let errorMsg = 'API Request Failed';
+    if (error.message) {
+      errorMsg = error.message;
+    }
+    setOaiState(container, 2, errorMsg, null);
   }
 }
