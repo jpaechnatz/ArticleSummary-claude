@@ -79,7 +79,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       $successResponse = array(
         'response' => array(
           'data' => array(
-            "oai_url" => rtrim($oai_url, '/') . '/api/generate',
+            "oai_url" => $oai_url . '/api/generate',
             "oai_key" => $oai_key,
             "model" => $oai_model,
             "system" => $oai_prompt,
@@ -133,40 +133,56 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
             break;
           case 'h1':
             $markdown .= "# ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'h2':
             $markdown .= "## ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'h3':
             $markdown .= "### ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'h4':
             $markdown .= "#### ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'h5':
             $markdown .= "##### ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'h6':
             $markdown .= "###### ";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "\n\n";
             break;
           case 'a':
             // $markdown .= "[";
-            // $markdown .= $processNode($node->firstChild);
+            // foreach ($node->childNodes as $child) {
+            //   $markdown .= $processNode($child);
+            // }
             // $markdown .= "](" . $node->getAttribute('href') . ")";
             $markdown .= "`";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "`";
             break;
           case 'img':
@@ -176,13 +192,17 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
           case 'strong':
           case 'b':
             $markdown .= "**";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "**";
             break;
           case 'em':
           case 'i':
             $markdown .= "*";
-            $markdown .= $processNode($node->firstChild);
+            foreach ($node->childNodes as $child) {
+              $markdown .= $processNode($child);
+            }
             $markdown .= "*";
             break;
           case 'ul':
