@@ -46,10 +46,8 @@ function setOaiState(container, statusType, statusMsg, summaryText) {
     }
   }
 
-  console.log(content);
-  
   if (summaryText) {
-    content.innerHTML = summaryText.replace(/(?:\r\n|\r|\n)/g, '<br>');
+    content.innerHTML = summaryText;
   }
 }
 
@@ -76,7 +74,6 @@ async function summarizeButtonClick(target) {
     });
 
     const xresp = response.data;
-    console.log(xresp);
 
     if (response.status !== 200 || !xresp.response || !xresp.response.data) {
       throw new Error('Request Failed');
@@ -102,9 +99,11 @@ async function summarizeButtonClick(target) {
 
 async function sendOpenAIRequest(container, oaiParams) {
   try {
-    let body = JSON.parse(JSON.stringify(oaiParams));
+    let body = {...oaiParams};
     delete body['oai_url'];
-    delete body['oai_key'];	  
+    delete body['oai_key'];
+    body.stream = true; // Enable streaming
+
     const response = await fetch(oaiParams.oai_url, {
       method: 'POST',
       headers: {
@@ -120,6 +119,8 @@ async function sendOpenAIRequest(container, oaiParams) {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let fullText = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -128,9 +129,34 @@ async function sendOpenAIRequest(container, oaiParams) {
         break;
       }
 
-      const chunk = decoder.decode(value, { stream: true });
-      const text = JSON.parse(chunk)?.choices[0]?.message?.content || ''
-      setOaiState(container, 0, null, marked.parse(text));
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process Server-Sent Events format
+      let endIndex;
+      while ((endIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, endIndex).trim();
+        buffer = buffer.slice(endIndex + 1);
+
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6); // Remove 'data: ' prefix
+
+          if (data === '[DONE]') {
+            setOaiState(container, 0, 'finish', null);
+            break;
+          }
+
+          try {
+            const json = JSON.parse(data);
+            const content = json.choices?.[0]?.delta?.content || '';
+            if (content) {
+              fullText += content;
+              setOaiState(container, 0, null, marked.parse(fullText));
+            }
+          } catch (e) {
+            console.error('Error parsing SSE JSON:', e, 'Data:', data);
+          }
+        }
+      }
     }
   } catch (error) {
     console.error(error);
@@ -141,13 +167,17 @@ async function sendOpenAIRequest(container, oaiParams) {
 
 async function sendOllamaRequest(container, oaiParams){
   try {
+    let body = {...oaiParams};
+    delete body['oai_url'];
+    delete body['oai_key'];
+
     const response = await fetch(oaiParams.oai_url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${oaiParams.oai_key}`
       },
-      body: JSON.stringify(oaiParams)
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
