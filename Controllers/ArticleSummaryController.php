@@ -2,6 +2,12 @@
 
 class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 {
+  public function indexAction()
+  {
+    // Default action - redirect to main page
+    Minz_Request::forward(array('c' => 'index', 'a' => 'index'), true);
+  }
+
   public function summarizeAction()
   {
     $this->view->_layout(false);
