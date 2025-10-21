@@ -10,9 +10,15 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   public function summarizeAction()
   {
+    // Disable layout and automatic rendering
     $this->view->_layout(false);
+    $this->view->_useTemplate(false);
+
     // Set response header to JSON
     header('Content-Type: application/json');
+
+    // Enable error logging for debugging
+    error_log("ArticleSummary: summarizeAction called");
 
     $oai_url = FreshRSS_Context::$user_conf->oai_url;
     $oai_key = FreshRSS_Context::$user_conf->oai_key;
@@ -20,29 +26,36 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     $oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
     $oai_provider = FreshRSS_Context::$user_conf->oai_provider;
 
+    error_log("ArticleSummary: Config - URL: " . ($oai_url ?: 'empty') . ", Provider: " . ($oai_provider ?: 'empty'));
+
     if (
       $this->isEmpty($oai_url)
       || $this->isEmpty($oai_key)
       || $this->isEmpty($oai_model)
       || $this->isEmpty($oai_prompt)
     ) {
-      echo json_encode(array(
+      error_log("ArticleSummary: Missing configuration");
+      $response = array(
         'response' => array(
           'data' => 'missing config',
           'error' => 'configuration'
         ),
         'status' => 200
-      ));
-      return;
+      );
+      error_log("ArticleSummary: Returning error response: " . json_encode($response));
+      echo json_encode($response);
+      exit();
     }
 
     $entry_id = Minz_Request::param('id');
+    error_log("ArticleSummary: Entry ID: " . $entry_id);
     $entry_dao = FreshRSS_Factory::createEntryDao();
     $entry = $entry_dao->searchById($entry_id);
 
     if ($entry === null) {
+      error_log("ArticleSummary: Entry not found");
       echo json_encode(array('status' => 404));
-      return;
+      exit();
     }
 
     $content = $entry->content(); // Replace with article content
@@ -98,8 +111,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         'status' => 200
       );
     }
-    echo json_encode($successResponse);
-    return;
+    error_log("ArticleSummary: Returning success response for provider: " . $oai_provider);
+    $jsonResponse = json_encode($successResponse);
+    error_log("ArticleSummary: JSON output: " . $jsonResponse);
+    echo $jsonResponse;
+    exit();
   }
 
   private function isEmpty($item)

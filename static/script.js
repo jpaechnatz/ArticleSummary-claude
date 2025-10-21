@@ -76,10 +76,15 @@ async function summarizeButtonClick(target) {
     console.log('PHP Response:', response);
     const xresp = response.data;
     console.log('Parsed Response:', xresp);
+    console.log('Response structure check:', {
+      hasResponse: !!xresp.response,
+      hasData: !!(xresp.response && xresp.response.data),
+      fullStructure: JSON.stringify(xresp, null, 2)
+    });
 
     if (response.status !== 200 || !xresp.response || !xresp.response.data) {
       console.error('Invalid response structure:', xresp);
-      throw new Error('Request Failed: Invalid response structure');
+      throw new Error('Request Failed: Invalid response structure - ' + JSON.stringify(xresp));
     }
 
     if (xresp.response.error) {
