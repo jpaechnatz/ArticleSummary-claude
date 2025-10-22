@@ -67,11 +67,7 @@ async function summarizeButtonClick(target) {
   };
 
   try {
-    const response = await axios.post(url, data, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await axios.post(url, data);
 
     console.log('PHP Response:', response);
     const xresp = response.data;
