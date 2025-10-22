@@ -63,11 +63,17 @@ async function summarizeButtonClick(target) {
   var url = target.dataset.request;
   var entryId = target.dataset.entryId;
 
+  console.log('Request URL:', url);
+  console.log('Entry ID:', entryId);
+  console.log('CSRF Token:', context.csrf);
+
   // Convert to URLSearchParams for form-encoded data
   var data = new URLSearchParams();
   data.append('ajax', 'true');
   data.append('_csrf', context.csrf);
   data.append('id', entryId);
+
+  console.log('POST data:', data.toString());
 
   try {
     const response = await axios.post(url, data, {

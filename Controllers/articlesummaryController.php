@@ -10,6 +10,13 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   public function summarizeAction()
   {
+    // Enable error logging FIRST
+    error_log("=== ArticleSummary: summarizeAction called ===");
+    error_log("Request method: " . $_SERVER['REQUEST_METHOD']);
+    error_log("Request URI: " . $_SERVER['REQUEST_URI']);
+    error_log("POST data: " . print_r($_POST, true));
+    error_log("GET data: " . print_r($_GET, true));
+
     // Disable layout and automatic rendering
     $this->view->_layout(false);
     $this->view->_useTemplate(false);
@@ -17,8 +24,8 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     // Set response header to JSON
     header('Content-Type: application/json');
 
-    // Enable error logging for debugging
-    error_log("ArticleSummary: summarizeAction called");
+    // Continue with error logging
+    error_log("ArticleSummary: Headers set, proceeding with logic");
 
     $oai_url = FreshRSS_Context::$user_conf->oai_url;
     $oai_key = FreshRSS_Context::$user_conf->oai_key;

@@ -22,10 +22,8 @@ class ArticleSummaryExtension extends Minz_Extension
 
   public function addSummaryButton($entry)
   {
-    $url_summary = Minz_Url::display(array(
-      'c' => 'ArticleSummary',
-      'a' => 'summarize'
-    ));
+    // Use absolute path to ensure proper routing
+    $url_summary = './i/?c=ArticleSummary&a=summarize';
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
