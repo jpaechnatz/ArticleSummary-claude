@@ -24,15 +24,12 @@ class ArticleSummaryExtension extends Minz_Extension
   {
     $url_summary = Minz_Url::display(array(
       'c' => 'ArticleSummary',
-      'a' => 'summarize',
-      'params' => array(
-        'id' => $entry->id()
-      )
+      'a' => 'summarize'
     ));
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
-      . '<button data-request="' . htmlspecialchars($url_summary, ENT_QUOTES, 'UTF-8') . '" class="oai-summary-btn"></button>'
+      . '<button data-request="' . htmlspecialchars($url_summary, ENT_QUOTES, 'UTF-8') . '" data-entry-id="' . $entry->id() . '" class="oai-summary-btn"></button>'
       . '<div class="oai-summary-content"></div>'
       . '</div>'
       . $entry->content()

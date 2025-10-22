@@ -61,14 +61,21 @@ async function summarizeButtonClick(target) {
 
   // This is the address where PHP gets the parameters
   var url = target.dataset.request;
+  var entryId = target.dataset.entryId;
 
   // Convert to URLSearchParams for form-encoded data
   var data = new URLSearchParams();
   data.append('ajax', 'true');
   data.append('_csrf', context.csrf);
+  data.append('id', entryId);
 
   try {
-    const response = await axios.post(url, data);
+    const response = await axios.post(url, data, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    });
 
     console.log('PHP Response:', response);
     const xresp = response.data;
