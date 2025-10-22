@@ -61,10 +61,11 @@ async function summarizeButtonClick(target) {
 
   // This is the address where PHP gets the parameters
   var url = target.dataset.request;
-  var data = {
-    ajax: true,
-    _csrf: context.csrf
-  };
+
+  // Convert to URLSearchParams for form-encoded data
+  var data = new URLSearchParams();
+  data.append('ajax', 'true');
+  data.append('_csrf', context.csrf);
 
   try {
     const response = await axios.post(url, data);
