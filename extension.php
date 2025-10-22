@@ -22,8 +22,9 @@ class ArticleSummaryExtension extends Minz_Extension
 
   public function addSummaryButton($entry)
   {
-    // Use FreshRSS URL helper to ensure proper routing
-    $url_summary = _url('ArticleSummary', 'summarize');
+    // Generate URL for extension controller
+    // Format: ?c=ControllerName&a=actionName
+    $url_summary = Minz_Url::display(array('c' => 'ArticleSummary', 'a' => 'summarize'));
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
