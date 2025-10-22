@@ -13,7 +13,7 @@ class ArticleSummaryExtension extends Minz_Extension
   public function init()
   {
     $this->registerHook('entry_before_display', array($this, 'addSummaryButton'));
-    $this->registerController('ArticleSummary');
+    $this->registerController('articlesummary');
     Minz_View::appendStyle($this->getFileUrl('style.css', 'css'));
     Minz_View::appendScript($this->getFileUrl('axios.js', 'js'));
     Minz_View::appendScript($this->getFileUrl('marked.js', 'js'));
@@ -22,13 +22,10 @@ class ArticleSummaryExtension extends Minz_Extension
 
   public function addSummaryButton($entry)
   {
-    // Generate URL for extension controller using FreshRSS URL helper
-    // Include extension (e), controller (c), and action (a) parameters
-    $url_summary = Minz_Url::display(array(
-      'e' => 'ArticleSummary',
-      'c' => 'articlesummary',
-      'a' => 'summarize'
-    ));
+    // Generate URL for extension controller
+    // Extension controllers use the same routing as core controllers (?c=controller&a=action)
+    // Use _url() helper which generates proper URLs relative to the FreshRSS base
+    $url_summary = _url('articlesummary', 'summarize');
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
