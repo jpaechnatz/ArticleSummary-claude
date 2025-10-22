@@ -13,6 +13,7 @@ class ArticleSummaryExtension extends Minz_Extension
   public function init()
   {
     $this->registerHook('entry_before_display', array($this, 'addSummaryButton'));
+    $this->registerController('articlesummary');
     Minz_View::appendStyle($this->getFileUrl('style.css', 'css'));
     Minz_View::appendScript($this->getFileUrl('axios.js', 'js'));
     Minz_View::appendScript($this->getFileUrl('marked.js', 'js'));
