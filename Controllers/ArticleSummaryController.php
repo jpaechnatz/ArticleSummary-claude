@@ -114,7 +114,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
   private function sendJson(array $payload): void
   {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
   }
 
   /**
@@ -158,7 +158,18 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       return $response;
     }
 
-    $json = json_decode($response['body'], true);
+    $body = (string)$response['body'];
+    $json = json_decode($body, true);
+
+    if ($response['status'] < 200 || $response['status'] >= 300) {
+      $message = $this->extractProviderErrorMessage($response['status'], $json, $body);
+      return array(
+        'status' => $response['status'],
+        'summary' => null,
+        'error' => $message,
+      );
+    }
+
     if (!is_array($json)) {
       return array(
         'status' => $response['status'],
@@ -225,19 +236,47 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       );
     }
 
-    if ($status < 200 || $status >= 300) {
-      return array(
-        'status' => $status,
-        'body' => null,
-        'error' => 'Provider request failed with HTTP ' . $status,
-      );
-    }
-
     return array(
       'status' => $status,
-      'body' => $body,
+      'body' => $body === false ? null : $body,
       'error' => null,
     );
+  }
+
+  private function extractProviderErrorMessage(int $status, $decodedBody, string $rawBody): string
+  {
+    if (is_array($decodedBody)) {
+      if (isset($decodedBody['error'])) {
+        $error = $decodedBody['error'];
+        if (is_string($error) && trim($error) !== '') {
+          return $error;
+        }
+
+        if (is_array($error)) {
+          if (isset($error['message']) && trim((string)$error['message']) !== '') {
+            return (string)$error['message'];
+          }
+          if (isset($error['code']) && trim((string)$error['code']) !== '') {
+            return 'Provider error: ' . (string)$error['code'];
+          }
+        }
+      }
+
+      if (isset($decodedBody['message']) && trim((string)$decodedBody['message']) !== '') {
+        return (string)$decodedBody['message'];
+      }
+    }
+
+    $trimmedBody = trim($rawBody);
+    if ($trimmedBody === '') {
+      return 'Provider request failed with HTTP ' . $status;
+    }
+
+    if (strlen($trimmedBody) > 500) {
+      $trimmedBody = substr($trimmedBody, 0, 500) . '…';
+    }
+
+    return $trimmedBody;
   }
 
   private function htmlToMarkdown($content)
