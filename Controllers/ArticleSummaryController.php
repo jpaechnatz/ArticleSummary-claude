@@ -4,10 +4,13 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 {
   /** @var bool */
   private $isAjax = false;
+  /** @var array<string,mixed> */
+  private $extensionConfig = array();
 
   public function firstAction(): void
   {
     $this->isAjax = Minz_Request::paramBoolean('ajax');
+    $this->extensionConfig = $this->loadExtensionConfig();
     if ($this->isAjax) {
       $this->view->_layout(null);
       Minz_Request::_param('ajax');
@@ -140,12 +143,27 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   private function getUserConfigValue(string $key, $default = null)
   {
-    $conf = FreshRSS_Context::$user_conf;
-    if (isset($conf->$key)) {
-      return $conf->$key;
+    if (array_key_exists($key, $this->extensionConfig)) {
+      return $this->extensionConfig[$key];
     }
 
     return $default;
+  }
+
+  /**
+   * @return array<string,mixed>
+   */
+  private function loadExtensionConfig(): array
+  {
+    $userConf = FreshRSS_Context::userConf();
+    if ($userConf !== null && isset($userConf->extensions) && is_array($userConf->extensions)) {
+      $extensions = $userConf->extensions;
+      if (isset($extensions['ArticleSummary']) && is_array($extensions['ArticleSummary'])) {
+        return $extensions['ArticleSummary'];
+      }
+    }
+
+    return array();
   }
 
   private function sendJson(array $payload): void

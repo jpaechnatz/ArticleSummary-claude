@@ -1,18 +1,21 @@
 <?php
-$userConf = FreshRSS_Context::$user_conf;
-$oai_url = isset($userConf->oai_url) ? $userConf->oai_url : '';
-$oai_key = isset($userConf->oai_key) ? $userConf->oai_key : '';
-$has_oai_key = !empty($oai_key);
-$oai_model = isset($userConf->oai_model) ? $userConf->oai_model : '';
-$oai_prompt = isset($userConf->oai_prompt) ? $userConf->oai_prompt : '';
-$oai_provider = isset($userConf->oai_provider) && $userConf->oai_provider ? $userConf->oai_provider : 'openai';
-$oai_temperature = isset($userConf->oai_temperature) ? $userConf->oai_temperature : null;
-$oai_max_tokens = isset($userConf->oai_max_tokens) ? $userConf->oai_max_tokens : null;
+$oai_url = (string)$this->getUserConfigurationValue('oai_url', '');
+$oai_key = (string)$this->getUserConfigurationValue('oai_key', '');
+$has_oai_key = $oai_key !== '';
+$oai_model = (string)$this->getUserConfigurationValue('oai_model', '');
+$oai_prompt = (string)$this->getUserConfigurationValue('oai_prompt', '');
+$oai_provider = (string)$this->getUserConfigurationValue('oai_provider', 'openai');
+if (!in_array($oai_provider, ['openai', 'mistral', 'ollama'], true)) {
+  $oai_provider = 'openai';
+}
 
-$display_temperature = ($oai_temperature === null || $oai_temperature === '') ? '' : (float)$oai_temperature;
-$display_max_tokens = ($oai_max_tokens === null || $oai_max_tokens === '' || (int)$oai_max_tokens === 0)
+$raw_temperature = $this->getUserConfigurationValue('oai_temperature', null);
+$raw_max_tokens = $this->getUserConfigurationValue('oai_max_tokens', null);
+
+$display_temperature = ($raw_temperature === null || $raw_temperature === '') ? '' : (float)$raw_temperature;
+$display_max_tokens = ($raw_max_tokens === null || $raw_max_tokens === '' || (int)$raw_max_tokens === 0)
   ? ''
-  : (int)$oai_max_tokens;
+  : (int)$raw_max_tokens;
 ?>
 
 <form action="<?php echo _url('extension', 'configure', 'e', urlencode($this->getName())); ?>" method="post">
