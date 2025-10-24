@@ -193,11 +193,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       $summary = isset($json['choices'][0]['message']['content']) ? (string)$json['choices'][0]['message']['content'] : '';
     }
 
-    if ($summary === '') {
+    if (trim($summary) === '') {
       return array(
         'status' => $response['status'],
-        'summary' => null,
-        'error' => 'Provider returned an empty summary',
+        'summary' => 'Summary: Provider returned an empty summary',
+        'error' => null,
       );
     }
 
