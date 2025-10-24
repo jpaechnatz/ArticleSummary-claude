@@ -13,7 +13,7 @@ class ArticleSummaryExtension extends Minz_Extension
   public function init()
   {
     $this->registerHook('entry_before_display', array($this, 'addSummaryButton'));
-    $this->registerController('articlesummary');
+    $this->registerController('ArticleSummary');
     Minz_View::appendStyle($this->getFileUrl('style.css', 'css'));
     Minz_View::appendScript($this->getFileUrl('axios.js', 'js'));
     Minz_View::appendScript($this->getFileUrl('marked.js', 'js'));
@@ -23,9 +23,9 @@ class ArticleSummaryExtension extends Minz_Extension
   public function addSummaryButton($entry)
   {
     // Generate URL for extension action
-    // Use the extension controller pattern: ?c=articlesummary&a=summarize
-    // This routes to Controllers/articlesummaryController.php
-    $url_summary = _url('articlesummary', 'summarize');
+    // Use the extension controller pattern: ?c=ArticleSummary&a=summarize
+    // This routes to Controllers/ArticleSummaryController.php
+    $url_summary = _url('ArticleSummary', 'summarize');
 
     $entry->_content(
       '<div class="oai-summary-wrap">'

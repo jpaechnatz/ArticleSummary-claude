@@ -1,6 +1,6 @@
 <?php
 
-class FreshExtension_articlesummary_Controller extends Minz_ActionController
+class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 {
   public function indexAction()
   {
