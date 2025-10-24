@@ -31,13 +31,16 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   private function renderSummaryResponse(): void
   {
-    $oai_url = FreshRSS_Context::$user_conf->oai_url;
-    $oai_key = FreshRSS_Context::$user_conf->oai_key;
-    $oai_model = FreshRSS_Context::$user_conf->oai_model;
-    $oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
-    $oai_provider = FreshRSS_Context::$user_conf->oai_provider;
-    $oai_temperature = FreshRSS_Context::$user_conf->oai_temperature;
-    $oai_max_tokens = FreshRSS_Context::$user_conf->oai_max_tokens;
+    $oai_url = $this->getUserConfigValue('oai_url');
+    $oai_key = $this->getUserConfigValue('oai_key');
+    $oai_model = $this->getUserConfigValue('oai_model');
+    $oai_prompt = $this->getUserConfigValue('oai_prompt');
+    $oai_provider = strtolower((string)$this->getUserConfigValue('oai_provider', 'openai'));
+    if (!in_array($oai_provider, array('openai', 'mistral', 'ollama'), true)) {
+      $oai_provider = 'openai';
+    }
+    $oai_temperature = $this->getUserConfigValue('oai_temperature');
+    $oai_max_tokens = $this->getUserConfigValue('oai_max_tokens');
 
     if (
       $this->isEmpty($oai_url)
@@ -135,6 +138,16 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     return $item === null || trim($item) === '';
   }
 
+  private function getUserConfigValue(string $key, $default = null)
+  {
+    $conf = FreshRSS_Context::$user_conf;
+    if (isset($conf->$key)) {
+      return $conf->$key;
+    }
+
+    return $default;
+  }
+
   private function sendJson(array $payload): void
   {
     header('Content-Type: application/json; charset=utf-8');
@@ -155,8 +168,10 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         'system' => $config['prompt'],
         'prompt' => $config['content'],
         'stream' => false,
-        'temperature' => $config['temperature'],
       );
+      if ($config['temperature'] !== null) {
+        $payload['temperature'] = $config['temperature'];
+      }
       if ($config['max_tokens'] > 0) {
         $payload['max_tokens'] = $config['max_tokens'];
       }
@@ -184,13 +199,17 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         }
         if ($config['max_tokens'] > 0) {
           $payload['max_completion_tokens'] = $config['max_tokens'];
+          if ($this->isGpt5Model($config['model'])) {
+            $payload['max_output_tokens'] = $config['max_tokens'];
+          }
         }
       } else {
-        $payload['temperature'] = $config['temperature'];
+        if ($config['temperature'] !== null) {
+          $payload['temperature'] = $config['temperature'];
+        }
         if ($config['max_tokens'] > 0) {
           $payload['max_tokens'] = $config['max_tokens'];
         }
-        $payload['n'] = 1;
       }
     }
 
@@ -299,17 +318,38 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         }
 
         if (is_array($error)) {
-          if (isset($error['message']) && trim((string)$error['message']) !== '') {
-            return (string)$error['message'];
+          if (isset($error['message'])) {
+            $message = $error['message'];
+            if (is_string($message) && trim($message) !== '') {
+              return $message;
+            }
+            if (is_array($message)) {
+              $encoded = json_encode($message);
+              if ($encoded !== false) {
+                return $encoded;
+              }
+            }
           }
-          if (isset($error['code']) && trim((string)$error['code']) !== '') {
-            return 'Provider error: ' . (string)$error['code'];
+          if (isset($error['code'])) {
+            $code = $error['code'];
+            if (is_string($code) && trim($code) !== '') {
+              return 'Provider error: ' . $code;
+            }
           }
         }
       }
 
-      if (isset($decodedBody['message']) && trim((string)$decodedBody['message']) !== '') {
-        return (string)$decodedBody['message'];
+      if (isset($decodedBody['message'])) {
+        $message = $decodedBody['message'];
+        if (is_string($message) && trim($message) !== '') {
+          return $message;
+        }
+        if (is_array($message)) {
+          $encoded = json_encode($message);
+          if ($encoded !== false) {
+            return $encoded;
+          }
+        }
       }
     }
 
@@ -325,13 +365,18 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     return $trimmedBody;
   }
 
-  private function resolveOpenAiTemperature(string $model, float $configuredTemperature): ?float
+  private function resolveOpenAiTemperature(string $model, ?float $configuredTemperature): ?float
   {
     if (preg_match('/^gpt-5/i', $model)) {
       return null;
     }
 
     return $configuredTemperature;
+  }
+
+  private function isGpt5Model(string $model): bool
+  {
+    return preg_match('/^gpt-5/i', $model) === 1;
   }
 
   private function extractOpenAiSummary(array $decoded): string
@@ -345,44 +390,18 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       return '';
     }
 
-    $content = $message['content'];
-    if (is_string($content)) {
-      return $content;
-    }
-
-    if (!is_array($content)) {
-      return '';
-    }
-
     $parts = array();
-    foreach ($content as $fragment) {
-      if (is_array($fragment)) {
-        if (isset($fragment['text']) && is_string($fragment['text'])) {
-          $parts[] = $fragment['text'];
-          continue;
-        }
-        if (isset($fragment['output_text']) && is_string($fragment['output_text'])) {
-          $parts[] = $fragment['output_text'];
-          continue;
-        }
-        if (isset($fragment['type'], $fragment['content']) && is_string($fragment['content'])) {
-          $parts[] = $fragment['content'];
-          continue;
-        }
-        if (isset($fragment['content']) && is_array($fragment['content'])) {
-          foreach ($fragment['content'] as $nested) {
-            if (is_array($nested) && isset($nested['text']) && is_string($nested['text'])) {
-              $parts[] = $nested['text'];
-            } elseif (is_string($nested)) {
-              $parts[] = $nested;
-            }
-          }
-          continue;
-        }
-      } elseif (is_string($fragment)) {
-        $parts[] = $fragment;
-      }
+    $this->collectOpenAiContent($message['content'] ?? null, $parts);
+
+    if (empty($parts) && isset($message['text']) && is_string($message['text'])) {
+      $parts[] = trim($message['text']);
     }
+
+    $parts = array_values(array_filter(array_map(function ($fragment) {
+      return trim((string)$fragment);
+    }, $parts), function ($fragment) {
+      return $fragment !== '';
+    }));
 
     return trim(implode("\n", $parts));
   }
@@ -415,8 +434,33 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     return $refusal;
   }
 
-  private function normalizeTemperature($value): float
+  private function collectOpenAiContent($node, array &$parts): void
   {
+    if ($node === null) {
+      return;
+    }
+
+    if (is_string($node)) {
+      $parts[] = $node;
+      return;
+    }
+
+    if (is_array($node)) {
+      foreach ($node as $key => $value) {
+        if ($key === 'type' || $key === 'role' || $key === 'refusal') {
+          continue;
+        }
+        $this->collectOpenAiContent($value, $parts);
+      }
+    }
+  }
+
+  private function normalizeTemperature($value): ?float
+  {
+    if ($value === null || $value === '') {
+      return null;
+    }
+
     if (!is_numeric($value)) {
       return 0.7;
     }
@@ -433,8 +477,12 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   private function normalizeMaxTokens($value): int
   {
+    if ($value === null || $value === '') {
+      return 0;
+    }
+
     if (!is_numeric($value)) {
-      return 2048;
+      return 0;
     }
 
     $tokens = (int)$value;

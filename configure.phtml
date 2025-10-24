@@ -1,15 +1,18 @@
 <?php
-$oai_url = FreshRSS_Context::$user_conf->oai_url;
-$oai_key = FreshRSS_Context::$user_conf->oai_key;
+$userConf = FreshRSS_Context::$user_conf;
+$oai_url = isset($userConf->oai_url) ? $userConf->oai_url : '';
+$oai_key = isset($userConf->oai_key) ? $userConf->oai_key : '';
 $has_oai_key = !empty($oai_key);
-$oai_model = FreshRSS_Context::$user_conf->oai_model;
-$oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
-$oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Default to OpenAI
-$oai_temperature = FreshRSS_Context::$user_conf->oai_temperature;
-$oai_max_tokens = FreshRSS_Context::$user_conf->oai_max_tokens;
+$oai_model = isset($userConf->oai_model) ? $userConf->oai_model : '';
+$oai_prompt = isset($userConf->oai_prompt) ? $userConf->oai_prompt : '';
+$oai_provider = isset($userConf->oai_provider) && $userConf->oai_provider ? $userConf->oai_provider : 'openai';
+$oai_temperature = isset($userConf->oai_temperature) ? $userConf->oai_temperature : null;
+$oai_max_tokens = isset($userConf->oai_max_tokens) ? $userConf->oai_max_tokens : null;
 
-$display_temperature = is_numeric($oai_temperature) ? $oai_temperature : 0.7;
-$display_max_tokens = is_numeric($oai_max_tokens) && (int)$oai_max_tokens > 0 ? (int)$oai_max_tokens : 2048;
+$display_temperature = ($oai_temperature === null || $oai_temperature === '') ? '' : (float)$oai_temperature;
+$display_max_tokens = ($oai_max_tokens === null || $oai_max_tokens === '' || (int)$oai_max_tokens === 0)
+  ? ''
+  : (int)$oai_max_tokens;
 ?>
 
 <form action="<?php echo _url('extension', 'configure', 'e', urlencode($this->getName())); ?>" method="post">
@@ -17,6 +20,7 @@ $display_max_tokens = is_numeric($oai_max_tokens) && (int)$oai_max_tokens > 0 ? 
   <label for="oai_provider">Choose AI Provider</label>
   <select name="oai_provider">
       <option value="openai" <?php echo ($oai_provider == 'openai' ? 'selected' : ''); ?>>OpenAI</option>
+      <option value="mistral" <?php echo ($oai_provider == 'mistral' ? 'selected' : ''); ?>>Mistral (OpenAI compatible)</option>
       <option value="ollama" <?php echo ($oai_provider == 'ollama' ? 'selected' : ''); ?>>Ollama</option>
    </select>
  
@@ -49,14 +53,14 @@ $display_max_tokens = is_numeric($oai_max_tokens) && (int)$oai_max_tokens > 0 ? 
            name="oai_temperature"
            id="oai_temperature"
            value="<?php echo htmlspecialchars($display_temperature, ENT_QUOTES, 'UTF-8'); ?>">
-    <small>Some OpenAI GPT-5 models require the default temperature of 1.0 and will ignore other values.</small>
+    <small>Leave empty to use the provider default. Some OpenAI GPT-5 models require the default temperature of 1.0 and will ignore other values.</small>
     <label for="oai_max_tokens">Max tokens</label>
     <input type="number"
            min="0"
            name="oai_max_tokens"
            id="oai_max_tokens"
            value="<?php echo htmlspecialchars($display_max_tokens, ENT_QUOTES, 'UTF-8'); ?>">
-    <small>Set 0 to let the provider decide.</small>
+    <small>Leave empty or set 0 to let the provider decide.</small>
     <label for="oai_prompt">Prompt (add before content)</label>
     <textarea name="oai_prompt" id="oai_prompt"><?php echo htmlspecialchars($oai_prompt, ENT_QUOTES, 'UTF-8'); ?></textarea>
   </div>

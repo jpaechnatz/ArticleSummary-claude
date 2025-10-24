@@ -44,7 +44,7 @@ class ArticleSummaryExtension extends Minz_Extension
       $oai_key_param = Minz_Request::param('oai_key', null);
       $oai_model = trim(Minz_Request::param('oai_model', ''));
       $oai_prompt = trim(Minz_Request::param('oai_prompt', ''));
-      $oai_provider = Minz_Request::param('oai_provider', 'openai');
+      $oai_provider = strtolower(trim((string)Minz_Request::param('oai_provider', 'openai')));
       $clear_oai_key = Minz_Request::paramBoolean('clear_oai_key');
       $oai_temperature_param = trim((string)Minz_Request::param('oai_temperature', ''));
       $oai_max_tokens_param = trim((string)Minz_Request::param('oai_max_tokens', ''));
@@ -56,7 +56,7 @@ class ArticleSummaryExtension extends Minz_Extension
       }
 
       // Validate provider is one of the allowed values
-      if (!in_array($oai_provider, ['openai', 'ollama'])) {
+      if (!in_array($oai_provider, ['openai', 'mistral', 'ollama'])) {
         $oai_provider = 'openai';
       }
 
