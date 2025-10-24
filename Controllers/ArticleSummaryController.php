@@ -336,9 +336,6 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         }
         if ($config['max_tokens'] > 0) {
           $payload['max_completion_tokens'] = $config['max_tokens'];
-          if ($this->isGpt5Model($config['model'])) {
-            $payload['max_output_tokens'] = $config['max_tokens'];
-          }
         }
       } else {
         if ($config['temperature'] !== null) {
@@ -509,11 +506,6 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     }
 
     return $configuredTemperature;
-  }
-
-  private function isGpt5Model(string $model): bool
-  {
-    return preg_match('/^gpt-5/i', $model) === 1;
   }
 
   private function extractOpenAiSummary(array $decoded): string
