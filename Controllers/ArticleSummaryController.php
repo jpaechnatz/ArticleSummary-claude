@@ -158,49 +158,77 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
   private function loadExtensionConfig(): array
   {
     $config = array();
-    $userConf = FreshRSS_Context::userConf();
-    if ($userConf !== null) {
-      if (isset($userConf->extensions)) {
-        $extensions = $this->configValueToArray($userConf->extensions);
-        if (!empty($extensions)) {
-          $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
-          foreach ($candidates as $candidate) {
-            if (!isset($extensions[$candidate])) {
-              continue;
-            }
 
-            $extensionData = $this->configValueToArray($extensions[$candidate]);
-            if (empty($extensionData)) {
-              continue;
-            }
+    try {
+      $userConf = FreshRSS_Context::userConf();
+    } catch (Exception $exception) {
+      Minz_Log::warning('ArticleSummary: Unable to load user configuration (' . $exception->getMessage() . ')');
+      return $config;
+    }
 
-            foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
-              if (isset($extensionData[$bucket])) {
-                $bucketData = $this->configValueToArray($extensionData[$bucket]);
-                if (!empty($bucketData)) {
-                  $config = $bucketData;
-                  break 2;
-                }
-              }
-            }
+    $extensions = $userConf->attributeArray('extensions');
+    if (is_array($extensions)) {
+      $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
+      foreach ($candidates as $candidate) {
+        if (!array_key_exists($candidate, $extensions)) {
+          continue;
+        }
 
-            $flatConfig = $this->extractPrefixedConfig($extensionData, 'oai_');
-            if (!empty($flatConfig)) {
-              $config = $flatConfig;
-              break;
+        $extensionData = $this->configValueToArray($extensions[$candidate]);
+        if (empty($extensionData)) {
+          continue;
+        }
+
+        foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
+          if (isset($extensionData[$bucket])) {
+            $bucketData = $this->configValueToArray($extensionData[$bucket]);
+            if (!empty($bucketData)) {
+              $config = $bucketData;
+              break 2;
             }
           }
         }
-      }
 
-      foreach (array('oai_url', 'oai_key', 'oai_model', 'oai_prompt', 'oai_provider', 'oai_temperature', 'oai_max_tokens') as $legacyKey) {
-        if (isset($userConf->$legacyKey)) {
-          $config[$legacyKey] = $userConf->$legacyKey;
+        if (empty($config)) {
+          $flatConfig = $this->extractPrefixedConfig($extensionData, 'oai_');
+          if (!empty($flatConfig)) {
+            $config = $flatConfig;
+            break;
+          }
+
+          $config = $extensionData;
+          break;
         }
       }
     }
 
+    if (empty($config)) {
+      $extension = Minz_ExtensionManager::findExtension('ArticleSummary');
+      if ($extension instanceof Minz_Extension) {
+        foreach ($this->getKnownConfigKeys() as $key) {
+          $value = $extension->getUserConfigurationValue($key, null);
+          if ($value !== null) {
+            $config[$key] = $value;
+          }
+        }
+      }
+    }
+
+    foreach ($this->getKnownConfigKeys() as $legacyKey) {
+      if (!array_key_exists($legacyKey, $config) && $userConf->hasParam($legacyKey)) {
+        $config[$legacyKey] = $userConf->param($legacyKey, null);
+      }
+    }
+
     return $config;
+  }
+
+  /**
+   * @return array<int, string>
+   */
+  private function getKnownConfigKeys(): array
+  {
+    return array('oai_url', 'oai_key', 'oai_model', 'oai_prompt', 'oai_provider', 'oai_temperature', 'oai_max_tokens');
   }
 
   /**
