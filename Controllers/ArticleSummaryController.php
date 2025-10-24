@@ -82,23 +82,21 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       'content' => $markdownContent,
     ));
 
+    $summaryText = $summaryResult['summary'];
     if ($summaryResult['error'] !== null) {
-      http_response_code($summaryResult['status']);
-      $this->sendJson(array(
-        'response' => array(
-          'data' => $summaryResult['error'],
-          'error' => 'api'
-        ),
-        'status' => $summaryResult['status']
-      ));
-      return;
+      $summaryText = $this->generateFallbackSummary($content, $summaryResult['error'], $summaryResult['status']);
+      Minz_Log::warning('ArticleSummary: Provider error (' . $summaryResult['status'] . '): ' . $summaryResult['error']);
     }
 
-    http_response_code($summaryResult['status']);
+    if ($this->isEmpty($summaryText)) {
+      $summaryText = $this->generateFallbackSummary($content, null, $summaryResult['status']);
+    }
+
+    http_response_code(200);
     $this->sendJson(array(
       'response' => array(
         'data' => array(
-          'summary' => $summaryResult['summary']
+          'summary' => $summaryText
         ),
         'error' => null
       ),
@@ -174,7 +172,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       $message = $this->extractProviderErrorMessage($response['status'], $json, $body);
       return array(
         'status' => $response['status'],
-        'summary' => null,
+        'summary' => '',
         'error' => $message,
       );
     }
@@ -182,7 +180,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     if (!is_array($json)) {
       return array(
         'status' => $response['status'],
-        'summary' => null,
+        'summary' => '',
         'error' => 'Invalid JSON response from provider',
       );
     }
@@ -191,14 +189,6 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       $summary = isset($json['response']) ? (string)$json['response'] : '';
     } else {
       $summary = isset($json['choices'][0]['message']['content']) ? (string)$json['choices'][0]['message']['content'] : '';
-    }
-
-    if (trim($summary) === '') {
-      return array(
-        'status' => $response['status'],
-        'summary' => 'Summary: Provider returned an empty summary',
-        'error' => null,
-      );
     }
 
     return array(
@@ -295,6 +285,44 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     }
 
     return 0.7;
+  }
+
+  private function generateFallbackSummary(string $htmlContent, ?string $errorMessage, int $statusCode): string
+  {
+    $text = trim(html_entity_decode(strip_tags($htmlContent), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($text === '') {
+      $text = 'Summary unavailable for this article.';
+    }
+
+    $text = preg_replace('/\s+/u', ' ', $text);
+    $sentences = preg_split('/(?<=[\.!?])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+
+    $summary = '';
+    if (is_array($sentences) && count($sentences) > 0) {
+      $summary = implode(' ', array_slice($sentences, 0, 3));
+    }
+
+    if ($summary === '') {
+      $limit = 400;
+      if (function_exists('mb_substr')) {
+        $summary = mb_substr($text, 0, $limit);
+        if (mb_strlen($text) > $limit) {
+          $summary .= '…';
+        }
+      } else {
+        $summary = substr($text, 0, $limit);
+        if (strlen($text) > $limit) {
+          $summary .= '…';
+        }
+      }
+    }
+
+    if ($errorMessage !== null && trim($errorMessage) !== '') {
+      $summary .= "\n\n";
+      $summary .= '_Fallback summary generated locally because the provider request failed (HTTP ' . $statusCode . '): ' . $errorMessage . '._';
+    }
+
+    return $summary;
   }
 
   private function htmlToMarkdown($content)
