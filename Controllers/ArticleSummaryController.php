@@ -38,6 +38,9 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     $oai_key = $this->getUserConfigValue('oai_key');
     $oai_model = $this->getUserConfigValue('oai_model');
     $oai_prompt = $this->getUserConfigValue('oai_prompt');
+    if ($this->isEmpty($oai_prompt)) {
+      $oai_prompt = $this->getDefaultPrompt();
+    }
     $oai_provider = strtolower((string)$this->getUserConfigValue('oai_provider', 'openai'));
     if (!in_array($oai_provider, array('openai', 'mistral', 'ollama'), true)) {
       $oai_provider = 'openai';
@@ -49,7 +52,6 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       $this->isEmpty($oai_url)
       || $this->isEmpty($oai_key)
       || $this->isEmpty($oai_model)
-      || $this->isEmpty($oai_prompt)
     ) {
       $this->sendJson(array(
         'response' => array(
@@ -155,15 +157,52 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
    */
   private function loadExtensionConfig(): array
   {
+    $config = array();
     $userConf = FreshRSS_Context::userConf();
-    if ($userConf !== null && isset($userConf->extensions) && is_array($userConf->extensions)) {
-      $extensions = $userConf->extensions;
-      if (isset($extensions['ArticleSummary']) && is_array($extensions['ArticleSummary'])) {
-        return $extensions['ArticleSummary'];
+    if ($userConf !== null) {
+      if (isset($userConf->extensions) && is_array($userConf->extensions)) {
+        $extensions = $userConf->extensions;
+        $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
+        foreach ($candidates as $candidate) {
+          if (!isset($extensions[$candidate]) || !is_array($extensions[$candidate])) {
+            continue;
+          }
+          $extensionData = $extensions[$candidate];
+
+          foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
+            if (isset($extensionData[$bucket]) && is_array($extensionData[$bucket])) {
+              $config = $extensionData[$bucket];
+              break 2;
+            }
+          }
+
+          $flatConfig = array();
+          foreach ($extensionData as $key => $value) {
+            if (is_string($key) && strpos($key, 'oai_') === 0) {
+              $flatConfig[$key] = $value;
+            }
+          }
+          if (!empty($flatConfig)) {
+            $config = $flatConfig;
+            break;
+          }
+        }
+      }
+
+      foreach (array('oai_url', 'oai_key', 'oai_model', 'oai_prompt', 'oai_provider', 'oai_temperature', 'oai_max_tokens') as $legacyKey) {
+        if (isset($userConf->$legacyKey)) {
+          $config[$legacyKey] = $userConf->$legacyKey;
+        }
       }
     }
 
-    return array();
+    return $config;
+  }
+
+  private function getDefaultPrompt(): string
+  {
+    return 'You are an assistant that writes concise article summaries. '
+      . 'Summarize the following article content for a human reader.';
   }
 
   private function sendJson(array $payload): void
