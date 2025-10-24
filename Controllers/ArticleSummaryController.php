@@ -2,13 +2,34 @@
 
 class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 {
+  /** @var bool */
+  private $isAjax = false;
+
+  public function firstAction(): void
+  {
+    $this->isAjax = Minz_Request::paramBoolean('ajax');
+    if ($this->isAjax) {
+      $this->view->_layout(null);
+      Minz_Request::_param('ajax');
+    }
+  }
+
   public function indexAction()
   {
-    // Default action - redirect to main page
+    if ($this->isAjax) {
+      $this->renderSummaryResponse();
+      return;
+    }
+
     Minz_Request::forward(array('c' => 'index', 'a' => 'index'), true);
   }
 
   public function summarizeAction()
+  {
+    $this->renderSummaryResponse();
+  }
+
+  private function renderSummaryResponse(): void
   {
     // Enable error logging FIRST
     error_log("=== ArticleSummary: summarizeAction called ===");
@@ -17,12 +38,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     error_log("POST data: " . print_r($_POST, true));
     error_log("GET data: " . print_r($_GET, true));
 
-    // Disable layout and automatic rendering
-    $this->view->_layout(false);
-    $this->view->_useTemplate(false);
-
-    // Set response header to JSON
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
 
     // Continue with error logging
     error_log("ArticleSummary: Headers set, proceeding with logic");
@@ -54,13 +70,17 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       exit();
     }
 
-    $entry_id = Minz_Request::param('id');
+    $entry_id = Minz_Request::paramString('id');
+    if ($entry_id === '' && isset($_POST['id'])) {
+      $entry_id = trim((string)$_POST['id']);
+    }
     error_log("ArticleSummary: Entry ID: " . $entry_id);
     $entry_dao = FreshRSS_Factory::createEntryDao();
     $entry = $entry_dao->searchById($entry_id);
 
     if ($entry === null) {
       error_log("ArticleSummary: Entry not found");
+      http_response_code(404);
       echo json_encode(array('status' => 404));
       exit();
     }

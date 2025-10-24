@@ -25,7 +25,7 @@ class ArticleSummaryExtension extends Minz_Extension
     // Generate URL for extension action
     // Use the extension controller pattern: ?c=ArticleSummary&a=summarize
     // This routes to Controllers/ArticleSummaryController.php
-    $url_summary = _url('ArticleSummary', 'summarize');
+    $url_summary = _url('ArticleSummary', 'summarize', 'ajax', '1');
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
