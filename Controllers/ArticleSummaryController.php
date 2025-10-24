@@ -297,6 +297,7 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
   private function fetchSummary($provider, array $config): array
   {
     $endpoint = $config['url'];
+    $useOpenAiResponses = ($provider === 'openai') && $this->shouldUseOpenAiResponses($config['model']);
 
     if ($provider === 'ollama') {
       $endpoint .= '/api/generate';
@@ -311,6 +312,23 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       }
       if ($config['max_tokens'] > 0) {
         $payload['max_tokens'] = $config['max_tokens'];
+      }
+    } elseif ($useOpenAiResponses) {
+      $endpoint .= '/responses';
+      $payload = array(
+        'model' => $config['model'],
+        'instructions' => $config['prompt'],
+        'input' => array(
+          array(
+            'role' => 'user',
+            'content' => "input:\n" . $config['content'],
+          ),
+        ),
+        'stream' => false,
+      );
+
+      if ($config['max_tokens'] > 0) {
+        $payload['max_output_tokens'] = $config['max_tokens'];
       }
     } else {
       $endpoint .= '/chat/completions';
@@ -378,6 +396,17 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
     if ($provider === 'ollama') {
       $summary = isset($json['response']) ? (string)$json['response'] : '';
+    } elseif ($useOpenAiResponses) {
+      if (isset($json['status']) && is_string($json['status']) && $json['status'] === 'failed') {
+        $message = $this->extractProviderErrorMessage($response['status'], $json, $body);
+        return array(
+          'status' => $response['status'],
+          'summary' => '',
+          'error' => $message,
+        );
+      }
+
+      $summary = $this->extractOpenAiResponsesSummary($json);
     } else {
       $refusalMessage = $this->extractOpenAiRefusal($json);
       if ($refusalMessage !== null) {
@@ -508,6 +537,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     return $configuredTemperature;
   }
 
+  private function shouldUseOpenAiResponses(string $model): bool
+  {
+    return preg_match('/^gpt-5/i', $model) === 1;
+  }
+
   private function extractOpenAiSummary(array $decoded): string
   {
     if (!isset($decoded['choices'][0]['message']) || !is_array($decoded['choices'][0]['message'])) {
@@ -524,6 +558,57 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
     if (empty($parts) && isset($message['text']) && is_string($message['text'])) {
       $parts[] = trim($message['text']);
+    }
+
+    $parts = array_values(array_filter(array_map(function ($fragment) {
+      return trim((string)$fragment);
+    }, $parts), function ($fragment) {
+      return $fragment !== '';
+    }));
+
+    return trim(implode("\n", $parts));
+  }
+
+  private function extractOpenAiResponsesSummary(array $decoded): string
+  {
+    $parts = array();
+
+    if (isset($decoded['output_text']) && is_array($decoded['output_text'])) {
+      foreach ($decoded['output_text'] as $fragment) {
+        if (is_string($fragment)) {
+          $trimmed = trim($fragment);
+          if ($trimmed !== '') {
+            $parts[] = $trimmed;
+          }
+        }
+      }
+    }
+
+    if (empty($parts) && isset($decoded['output']) && is_array($decoded['output'])) {
+      foreach ($decoded['output'] as $outputItem) {
+        if (!is_array($outputItem)) {
+          continue;
+        }
+
+        if (isset($outputItem['content'])) {
+          $this->collectOpenAiContent($outputItem['content'], $parts);
+        }
+
+        if (isset($outputItem['text']) && is_string($outputItem['text'])) {
+          $trimmed = trim($outputItem['text']);
+          if ($trimmed !== '') {
+            $parts[] = $trimmed;
+          }
+        }
+      }
+    }
+
+    if (empty($parts) && isset($decoded['choices'])) {
+      return $this->extractOpenAiSummary($decoded);
+    }
+
+    if (empty($parts)) {
+      return '';
     }
 
     $parts = array_values(array_filter(array_map(function ($fragment) {
