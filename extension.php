@@ -101,5 +101,24 @@ class ArticleSummaryExtension extends Minz_Extension
     }
 
     $this->setUserConfiguration($config);
+
+    $userConf = FreshRSS_Context::userConf();
+    if ($userConf !== null) {
+      $map = array(
+        'oai_url',
+        'oai_model',
+        'oai_prompt',
+        'oai_provider',
+        'oai_key',
+        'oai_temperature',
+        'oai_max_tokens',
+      );
+      foreach ($map as $key) {
+        if (array_key_exists($key, $config)) {
+          $userConf->$key = $config[$key];
+        }
+      }
+      $userConf->save();
+    }
   }
 }

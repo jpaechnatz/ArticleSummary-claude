@@ -164,24 +164,26 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         $extensions = $userConf->extensions;
         $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
         foreach ($candidates as $candidate) {
-          if (!isset($extensions[$candidate]) || !is_array($extensions[$candidate])) {
+          if (!isset($extensions[$candidate])) {
             continue;
           }
-          $extensionData = $extensions[$candidate];
+
+          $extensionData = $this->configValueToArray($extensions[$candidate]);
+          if (empty($extensionData)) {
+            continue;
+          }
 
           foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
-            if (isset($extensionData[$bucket]) && is_array($extensionData[$bucket])) {
-              $config = $extensionData[$bucket];
-              break 2;
+            if (isset($extensionData[$bucket])) {
+              $bucketData = $this->configValueToArray($extensionData[$bucket]);
+              if (!empty($bucketData)) {
+                $config = $bucketData;
+                break 2;
+              }
             }
           }
 
-          $flatConfig = array();
-          foreach ($extensionData as $key => $value) {
-            if (is_string($key) && strpos($key, 'oai_') === 0) {
-              $flatConfig[$key] = $value;
-            }
-          }
+          $flatConfig = $this->extractPrefixedConfig($extensionData, 'oai_');
           if (!empty($flatConfig)) {
             $config = $flatConfig;
             break;
@@ -197,6 +199,54 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     }
 
     return $config;
+  }
+
+  /**
+   * @param mixed $value
+   * @return array<string,mixed>
+   */
+  private function configValueToArray($value): array
+  {
+    if (is_array($value)) {
+      return $value;
+    }
+
+    if (is_object($value)) {
+      if (method_exists($value, 'toArray')) {
+        $arrayValue = $value->toArray();
+        if (is_array($arrayValue)) {
+          return $arrayValue;
+        }
+      }
+
+      if ($value instanceof \Traversable) {
+        return iterator_to_array($value);
+      }
+
+      return get_object_vars($value);
+    }
+
+    return array();
+  }
+
+  /**
+   * @param array<string,mixed> $source
+   * @return array<string,mixed>
+   */
+  private function extractPrefixedConfig(array $source, string $prefix): array
+  {
+    $result = array();
+    foreach ($source as $key => $value) {
+      if (!is_string($key)) {
+        continue;
+      }
+
+      if (strpos($key, $prefix) === 0) {
+        $result[$key] = $value;
+      }
+    }
+
+    return $result;
   }
 
   private function getDefaultPrompt(): string
