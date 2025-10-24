@@ -146,13 +146,17 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
             'content' => "input: \n" . $config['content'],
           ),
         ),
-        'temperature' => 0.7,
         'stream' => false,
       );
 
       if ($provider === 'openai') {
+        $temperature = $this->resolveOpenAiTemperature($config['model']);
+        if ($temperature !== null) {
+          $payload['temperature'] = $temperature;
+        }
         $payload['max_completion_tokens'] = 2048;
       } else {
+        $payload['temperature'] = 0.7;
         $payload['max_tokens'] = 2048;
         $payload['n'] = 1;
       }
@@ -282,6 +286,15 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     }
 
     return $trimmedBody;
+  }
+
+  private function resolveOpenAiTemperature(string $model): ?float
+  {
+    if (preg_match('/^gpt-5/i', $model)) {
+      return null;
+    }
+
+    return 0.7;
   }
 
   private function htmlToMarkdown($content)
