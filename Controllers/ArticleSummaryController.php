@@ -146,11 +146,16 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
             'content' => "input: \n" . $config['content'],
           ),
         ),
-        'max_tokens' => 2048,
         'temperature' => 0.7,
-        'n' => 1,
         'stream' => false,
       );
+
+      if ($provider === 'openai') {
+        $payload['max_completion_tokens'] = 2048;
+      } else {
+        $payload['max_tokens'] = 2048;
+        $payload['n'] = 1;
+      }
     }
 
     $response = $this->performHttpRequest($endpoint, $payload, $config['key']);
