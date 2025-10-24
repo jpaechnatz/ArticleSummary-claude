@@ -160,33 +160,35 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     $config = array();
     $userConf = FreshRSS_Context::userConf();
     if ($userConf !== null) {
-      if (isset($userConf->extensions) && is_array($userConf->extensions)) {
-        $extensions = $userConf->extensions;
-        $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
-        foreach ($candidates as $candidate) {
-          if (!isset($extensions[$candidate])) {
-            continue;
-          }
+      if (isset($userConf->extensions)) {
+        $extensions = $this->configValueToArray($userConf->extensions);
+        if (!empty($extensions)) {
+          $candidates = array('ArticleSummary', 'articlesummary', 'ArticleSummaryExtension');
+          foreach ($candidates as $candidate) {
+            if (!isset($extensions[$candidate])) {
+              continue;
+            }
 
-          $extensionData = $this->configValueToArray($extensions[$candidate]);
-          if (empty($extensionData)) {
-            continue;
-          }
+            $extensionData = $this->configValueToArray($extensions[$candidate]);
+            if (empty($extensionData)) {
+              continue;
+            }
 
-          foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
-            if (isset($extensionData[$bucket])) {
-              $bucketData = $this->configValueToArray($extensionData[$bucket]);
-              if (!empty($bucketData)) {
-                $config = $bucketData;
-                break 2;
+            foreach (array('config', 'configs', 'parameters', 'settings', 'user') as $bucket) {
+              if (isset($extensionData[$bucket])) {
+                $bucketData = $this->configValueToArray($extensionData[$bucket]);
+                if (!empty($bucketData)) {
+                  $config = $bucketData;
+                  break 2;
+                }
               }
             }
-          }
 
-          $flatConfig = $this->extractPrefixedConfig($extensionData, 'oai_');
-          if (!empty($flatConfig)) {
-            $config = $flatConfig;
-            break;
+            $flatConfig = $this->extractPrefixedConfig($extensionData, 'oai_');
+            if (!empty($flatConfig)) {
+              $config = $flatConfig;
+              break;
+            }
           }
         }
       }
