@@ -41,10 +41,11 @@ class ArticleSummaryExtension extends Minz_Extension
   {
     if (Minz_Request::isPost()) {
       $oai_url = trim(Minz_Request::param('oai_url', ''));
-      $oai_key = trim(Minz_Request::param('oai_key', ''));
+      $oai_key_param = Minz_Request::param('oai_key', null);
       $oai_model = trim(Minz_Request::param('oai_model', ''));
       $oai_prompt = trim(Minz_Request::param('oai_prompt', ''));
       $oai_provider = Minz_Request::param('oai_provider', 'openai');
+      $clear_oai_key = Minz_Request::paramBoolean('clear_oai_key');
 
       // Validate URL format
       if (!empty($oai_url) && !filter_var($oai_url, FILTER_VALIDATE_URL)) {
@@ -58,7 +59,11 @@ class ArticleSummaryExtension extends Minz_Extension
       }
 
       FreshRSS_Context::$user_conf->oai_url = $oai_url;
-      FreshRSS_Context::$user_conf->oai_key = $oai_key;
+      if ($clear_oai_key) {
+        FreshRSS_Context::$user_conf->oai_key = '';
+      } elseif ($oai_key_param !== null && trim($oai_key_param) !== '') {
+        FreshRSS_Context::$user_conf->oai_key = trim($oai_key_param);
+      }
       FreshRSS_Context::$user_conf->oai_model = $oai_model;
       FreshRSS_Context::$user_conf->oai_prompt = $oai_prompt;
       FreshRSS_Context::$user_conf->oai_provider = $oai_provider;

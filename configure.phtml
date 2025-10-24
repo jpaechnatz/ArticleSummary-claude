@@ -1,6 +1,7 @@
 <?php
 $oai_url = FreshRSS_Context::$user_conf->oai_url;
 $oai_key = FreshRSS_Context::$user_conf->oai_key;
+$has_oai_key = !empty($oai_key);
 $oai_model = FreshRSS_Context::$user_conf->oai_model;
 $oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
 $oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Default to OpenAI
@@ -18,7 +19,21 @@ $oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Defau
     <label for="oai_url">Base URL (http(s)://oai.com/) without 'v1'</label>
     <input type="text" name="oai_url" id="oai_url" value="<?php echo htmlspecialchars($oai_url, ENT_QUOTES, 'UTF-8'); ?>">
     <label for="oai_key">API Key</label>
-    <input type="text" name="oai_key" id="oai_key" value="<?php echo htmlspecialchars($oai_key, ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="password"
+           name="oai_key"
+           id="oai_key"
+           value=""
+           autocomplete="new-password"
+           placeholder="<?php echo $has_oai_key ? '••••••••' : ''; ?>">
+    <small>Leave blank to keep the existing key.</small>
+    <?php if ($has_oai_key) { ?>
+      <div class="oai-key-clear">
+        <label>
+          <input type="checkbox" name="clear_oai_key" value="1">
+          Remove stored key
+        </label>
+      </div>
+    <?php } ?>
     <label for="oai_model">Model Name</label>
     <input type="text" name="oai_model" id="oai_model" value="<?php echo htmlspecialchars($oai_model, ENT_QUOTES, 'UTF-8'); ?>">
     <label for="oai_prompt">Prompt (add before content)</label>

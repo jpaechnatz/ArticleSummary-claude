@@ -31,25 +31,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
   private function renderSummaryResponse(): void
   {
-    // Enable error logging FIRST
-    error_log("=== ArticleSummary: summarizeAction called ===");
-    error_log("Request method: " . $_SERVER['REQUEST_METHOD']);
-    error_log("Request URI: " . $_SERVER['REQUEST_URI']);
-    error_log("POST data: " . print_r($_POST, true));
-    error_log("GET data: " . print_r($_GET, true));
-
-    header('Content-Type: application/json; charset=utf-8');
-
-    // Continue with error logging
-    error_log("ArticleSummary: Headers set, proceeding with logic");
-
     $oai_url = FreshRSS_Context::$user_conf->oai_url;
     $oai_key = FreshRSS_Context::$user_conf->oai_key;
     $oai_model = FreshRSS_Context::$user_conf->oai_model;
     $oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
     $oai_provider = FreshRSS_Context::$user_conf->oai_provider;
-
-    error_log("ArticleSummary: Config - URL: " . ($oai_url ?: 'empty') . ", Provider: " . ($oai_provider ?: 'empty'));
 
     if (
       $this->isEmpty($oai_url)
@@ -57,32 +43,27 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       || $this->isEmpty($oai_model)
       || $this->isEmpty($oai_prompt)
     ) {
-      error_log("ArticleSummary: Missing configuration");
-      $response = array(
+      $this->sendJson(array(
         'response' => array(
           'data' => 'missing config',
           'error' => 'configuration'
         ),
         'status' => 200
-      );
-      error_log("ArticleSummary: Returning error response: " . json_encode($response));
-      echo json_encode($response);
-      exit();
+      ));
+      return;
     }
 
     $entry_id = Minz_Request::paramString('id');
     if ($entry_id === '' && isset($_POST['id'])) {
       $entry_id = trim((string)$_POST['id']);
     }
-    error_log("ArticleSummary: Entry ID: " . $entry_id);
     $entry_dao = FreshRSS_Factory::createEntryDao();
     $entry = $entry_dao->searchById($entry_id);
 
     if ($entry === null) {
-      error_log("ArticleSummary: Entry not found");
       http_response_code(404);
-      echo json_encode(array('status' => 404));
-      exit();
+      $this->sendJson(array('status' => 404));
+      return;
     }
 
     $content = $entry->content(); // Replace with article content
@@ -92,62 +73,171 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     if (!preg_match('/\/v\d+\/?$/', $oai_url)) {
         $oai_url .= '/v1'; // If there is no version information, add /v1
     }
-    // Open AI Input
-    $successResponse = array(
+    $markdownContent = $this->htmlToMarkdown($content);
+    $summaryResult = $this->fetchSummary($oai_provider, array(
+      'url' => $oai_url,
+      'key' => $oai_key,
+      'model' => $oai_model,
+      'prompt' => $oai_prompt,
+      'content' => $markdownContent,
+    ));
+
+    if ($summaryResult['error'] !== null) {
+      http_response_code($summaryResult['status']);
+      $this->sendJson(array(
+        'response' => array(
+          'data' => $summaryResult['error'],
+          'error' => 'api'
+        ),
+        'status' => $summaryResult['status']
+      ));
+      return;
+    }
+
+    http_response_code($summaryResult['status']);
+    $this->sendJson(array(
       'response' => array(
         'data' => array(
-          // Determine whether the URL ends with a version. If it does, no version information is added. If not, /v1 is added by default.
-          "oai_url" => $oai_url . '/chat/completions',
-          "oai_key" => $oai_key,
-          "model" => $oai_model,
-          "messages" => [
-            [
-              "role" => "system",
-              "content" => $oai_prompt
-            ],
-            [
-              "role" => "user",
-              "content" => "input: \n" . $this->htmlToMarkdown($content),
-            ]
-          ],
-          "max_tokens" => 2048, // You can adjust the length of the summary as needed
-          "temperature" => 0.7, // You can adjust the randomness/temperature of the generated text as needed
-          "n" => 1 // Generate summary
+          'summary' => $summaryResult['summary']
         ),
-        'provider' => 'openai',
         'error' => null
       ),
       'status' => 200
-    );
-
-    // Ollama API Input
-    if ($oai_provider === "ollama") {
-      $successResponse = array(
-        'response' => array(
-          'data' => array(
-            "oai_url" => $oai_url . '/api/generate',
-            "oai_key" => $oai_key,
-            "model" => $oai_model,
-            "system" => $oai_prompt,
-            "prompt" =>  $this->htmlToMarkdown($content),
-            "stream" => true,
-          ),
-          'provider' => 'ollama',
-          'error' => null
-        ),
-        'status' => 200
-      );
-    }
-    error_log("ArticleSummary: Returning success response for provider: " . $oai_provider);
-    $jsonResponse = json_encode($successResponse);
-    error_log("ArticleSummary: JSON output: " . $jsonResponse);
-    echo $jsonResponse;
-    exit();
+    ));
   }
 
   private function isEmpty($item)
   {
     return $item === null || trim($item) === '';
+  }
+
+  private function sendJson(array $payload): void
+  {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload);
+  }
+
+  /**
+   * @return array{status:int, summary:string|null, error:string|null}
+   */
+  private function fetchSummary($provider, array $config): array
+  {
+    $endpoint = $config['url'];
+
+    if ($provider === 'ollama') {
+      $endpoint .= '/api/generate';
+      $payload = array(
+        'model' => $config['model'],
+        'system' => $config['prompt'],
+        'prompt' => $config['content'],
+        'stream' => false,
+      );
+    } else {
+      $endpoint .= '/chat/completions';
+      $payload = array(
+        'model' => $config['model'],
+        'messages' => array(
+          array(
+            'role' => 'system',
+            'content' => $config['prompt'],
+          ),
+          array(
+            'role' => 'user',
+            'content' => "input: \n" . $config['content'],
+          ),
+        ),
+        'max_tokens' => 2048,
+        'temperature' => 0.7,
+        'n' => 1,
+        'stream' => false,
+      );
+    }
+
+    $response = $this->performHttpRequest($endpoint, $payload, $config['key']);
+    if ($response['error'] !== null) {
+      return $response;
+    }
+
+    $json = json_decode($response['body'], true);
+    if (!is_array($json)) {
+      return array(
+        'status' => $response['status'],
+        'summary' => null,
+        'error' => 'Invalid JSON response from provider',
+      );
+    }
+
+    if ($provider === 'ollama') {
+      $summary = isset($json['response']) ? (string)$json['response'] : '';
+    } else {
+      $summary = isset($json['choices'][0]['message']['content']) ? (string)$json['choices'][0]['message']['content'] : '';
+    }
+
+    if ($summary === '') {
+      return array(
+        'status' => $response['status'],
+        'summary' => null,
+        'error' => 'Provider returned an empty summary',
+      );
+    }
+
+    return array(
+      'status' => $response['status'],
+      'summary' => $summary,
+      'error' => null,
+    );
+  }
+
+  /**
+   * @return array{status:int, body:string|null, error:string|null}
+   */
+  private function performHttpRequest(string $url, array $payload, string $apiKey): array
+  {
+    if (!function_exists('curl_init')) {
+      return array(
+        'status' => 500,
+        'body' => null,
+        'error' => 'cURL extension is not available on the server',
+      );
+    }
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+      'Content-Type: application/json',
+      'Authorization: Bearer ' . $apiKey,
+    ));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+    $body = curl_exec($ch);
+    $error = $body === false ? curl_error($ch) : null;
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($error !== null) {
+      return array(
+        'status' => 500,
+        'body' => null,
+        'error' => $error,
+      );
+    }
+
+    if ($status < 200 || $status >= 300) {
+      return array(
+        'status' => $status,
+        'body' => null,
+        'error' => 'Provider request failed with HTTP ' . $status,
+      );
+    }
+
+    return array(
+      'status' => $status,
+      'body' => $body,
+      'error' => null,
+    );
   }
 
   private function htmlToMarkdown($content)
