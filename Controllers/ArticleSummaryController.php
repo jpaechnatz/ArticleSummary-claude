@@ -82,14 +82,33 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       'content' => $markdownContent,
     ));
 
-    $summaryText = $summaryResult['summary'];
     if ($summaryResult['error'] !== null) {
-      $summaryText = $this->generateFallbackSummary($content, $summaryResult['error'], $summaryResult['status']);
       Minz_Log::warning('ArticleSummary: Provider error (' . $summaryResult['status'] . '): ' . $summaryResult['error']);
+      $status = $summaryResult['status'] >= 400 ? $summaryResult['status'] : 502;
+      http_response_code($status);
+      $this->sendJson(array(
+        'response' => array(
+          'data' => $summaryResult['error'],
+          'error' => 'provider'
+        ),
+        'status' => $status
+      ));
+      return;
     }
 
-    if ($this->isEmpty($summaryText)) {
-      $summaryText = $this->generateFallbackSummary($content, null, $summaryResult['status']);
+    $summaryText = isset($summaryResult['summary']) ? trim((string)$summaryResult['summary']) : '';
+    if ($summaryText === '') {
+      $message = 'Provider returned an empty summary';
+      Minz_Log::warning('ArticleSummary: ' . $message . ' (' . $summaryResult['status'] . ')');
+      http_response_code(502);
+      $this->sendJson(array(
+        'response' => array(
+          'data' => $message,
+          'error' => 'provider'
+        ),
+        'status' => 502
+      ));
+      return;
     }
 
     http_response_code(200);
@@ -162,7 +181,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
 
     $response = $this->performHttpRequest($endpoint, $payload, $config['key']);
     if ($response['error'] !== null) {
-      return $response;
+      return array(
+        'status' => $response['status'],
+        'summary' => '',
+        'error' => $response['error'],
+      );
     }
 
     $body = (string)$response['body'];
@@ -285,44 +308,6 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     }
 
     return 0.7;
-  }
-
-  private function generateFallbackSummary(string $htmlContent, ?string $errorMessage, int $statusCode): string
-  {
-    $text = trim(html_entity_decode(strip_tags($htmlContent), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-    if ($text === '') {
-      $text = 'Summary unavailable for this article.';
-    }
-
-    $text = preg_replace('/\s+/u', ' ', $text);
-    $sentences = preg_split('/(?<=[\.!?])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
-
-    $summary = '';
-    if (is_array($sentences) && count($sentences) > 0) {
-      $summary = implode(' ', array_slice($sentences, 0, 3));
-    }
-
-    if ($summary === '') {
-      $limit = 400;
-      if (function_exists('mb_substr')) {
-        $summary = mb_substr($text, 0, $limit);
-        if (mb_strlen($text) > $limit) {
-          $summary .= '…';
-        }
-      } else {
-        $summary = substr($text, 0, $limit);
-        if (strlen($text) > $limit) {
-          $summary .= '…';
-        }
-      }
-    }
-
-    if ($errorMessage !== null && trim($errorMessage) !== '') {
-      $summary .= "\n\n";
-      $summary .= '_Fallback summary generated locally because the provider request failed (HTTP ' . $statusCode . '): ' . $errorMessage . '._';
-    }
-
-    return $summary;
   }
 
   private function htmlToMarkdown($content)

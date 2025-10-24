@@ -100,7 +100,14 @@ async function summarizeButtonClick(target) {
     console.error('Error response:', error.response);
     let errorMsg = 'Request Failed';
     if (error.response) {
-      errorMsg += ': ' + (error.response.statusText || error.response.status);
+      const statusLabel = error.response.statusText || error.response.status;
+      if (statusLabel) {
+        errorMsg += ': ' + statusLabel;
+      }
+      const serverData = error.response.data;
+      if (serverData && serverData.response && serverData.response.data) {
+        errorMsg = serverData.response.data;
+      }
     } else if (error.message) {
       errorMsg += ': ' + error.message;
     }
