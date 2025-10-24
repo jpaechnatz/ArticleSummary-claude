@@ -46,6 +46,8 @@ class ArticleSummaryExtension extends Minz_Extension
       $oai_prompt = trim(Minz_Request::param('oai_prompt', ''));
       $oai_provider = Minz_Request::param('oai_provider', 'openai');
       $clear_oai_key = Minz_Request::paramBoolean('clear_oai_key');
+      $oai_temperature_param = trim((string)Minz_Request::param('oai_temperature', ''));
+      $oai_max_tokens_param = trim((string)Minz_Request::param('oai_max_tokens', ''));
 
       // Validate URL format
       if (!empty($oai_url) && !filter_var($oai_url, FILTER_VALIDATE_URL)) {
@@ -67,6 +69,29 @@ class ArticleSummaryExtension extends Minz_Extension
       FreshRSS_Context::$user_conf->oai_model = $oai_model;
       FreshRSS_Context::$user_conf->oai_prompt = $oai_prompt;
       FreshRSS_Context::$user_conf->oai_provider = $oai_provider;
+
+      if ($oai_temperature_param === '' || $oai_temperature_param === null) {
+        FreshRSS_Context::$user_conf->oai_temperature = null;
+      } else {
+        $temperature = (float)$oai_temperature_param;
+        if ($temperature < 0) {
+          $temperature = 0.0;
+        } elseif ($temperature > 2) {
+          $temperature = 2.0;
+        }
+        FreshRSS_Context::$user_conf->oai_temperature = $temperature;
+      }
+
+      if ($oai_max_tokens_param === '' || $oai_max_tokens_param === null) {
+        FreshRSS_Context::$user_conf->oai_max_tokens = null;
+      } else {
+        $maxTokens = (int)$oai_max_tokens_param;
+        if ($maxTokens < 0) {
+          $maxTokens = 0;
+        }
+        FreshRSS_Context::$user_conf->oai_max_tokens = $maxTokens;
+      }
+
       FreshRSS_Context::$user_conf->save();
     }
   }

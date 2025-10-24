@@ -36,6 +36,8 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     $oai_model = FreshRSS_Context::$user_conf->oai_model;
     $oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
     $oai_provider = FreshRSS_Context::$user_conf->oai_provider;
+    $oai_temperature = FreshRSS_Context::$user_conf->oai_temperature;
+    $oai_max_tokens = FreshRSS_Context::$user_conf->oai_max_tokens;
 
     if (
       $this->isEmpty($oai_url)
@@ -73,6 +75,9 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     if (!preg_match('/\/v\d+\/?$/', $oai_url)) {
         $oai_url .= '/v1'; // If there is no version information, add /v1
     }
+    $temperature = $this->normalizeTemperature($oai_temperature);
+    $maxTokens = $this->normalizeMaxTokens($oai_max_tokens);
+
     $markdownContent = $this->htmlToMarkdown($content);
     $summaryResult = $this->fetchSummary($oai_provider, array(
       'url' => $oai_url,
@@ -80,6 +85,8 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       'model' => $oai_model,
       'prompt' => $oai_prompt,
       'content' => $markdownContent,
+      'temperature' => $temperature,
+      'max_tokens' => $maxTokens,
     ));
 
     if ($summaryResult['error'] !== null) {
@@ -148,7 +155,11 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
         'system' => $config['prompt'],
         'prompt' => $config['content'],
         'stream' => false,
+        'temperature' => $config['temperature'],
       );
+      if ($config['max_tokens'] > 0) {
+        $payload['max_tokens'] = $config['max_tokens'];
+      }
     } else {
       $endpoint .= '/chat/completions';
       $payload = array(
@@ -167,14 +178,18 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
       );
 
       if ($provider === 'openai') {
-        $temperature = $this->resolveOpenAiTemperature($config['model']);
+        $temperature = $this->resolveOpenAiTemperature($config['model'], $config['temperature']);
         if ($temperature !== null) {
           $payload['temperature'] = $temperature;
         }
-        $payload['max_completion_tokens'] = 2048;
+        if ($config['max_tokens'] > 0) {
+          $payload['max_completion_tokens'] = $config['max_tokens'];
+        }
       } else {
-        $payload['temperature'] = 0.7;
-        $payload['max_tokens'] = 2048;
+        $payload['temperature'] = $config['temperature'];
+        if ($config['max_tokens'] > 0) {
+          $payload['max_tokens'] = $config['max_tokens'];
+        }
         $payload['n'] = 1;
       }
     }
@@ -211,7 +226,16 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     if ($provider === 'ollama') {
       $summary = isset($json['response']) ? (string)$json['response'] : '';
     } else {
-      $summary = isset($json['choices'][0]['message']['content']) ? (string)$json['choices'][0]['message']['content'] : '';
+      $refusalMessage = $this->extractOpenAiRefusal($json);
+      if ($refusalMessage !== null) {
+        return array(
+          'status' => $response['status'],
+          'summary' => '',
+          'error' => $refusalMessage,
+        );
+      }
+
+      $summary = $this->extractOpenAiSummary($json);
     }
 
     return array(
@@ -301,13 +325,124 @@ class FreshExtension_ArticleSummary_Controller extends Minz_ActionController
     return $trimmedBody;
   }
 
-  private function resolveOpenAiTemperature(string $model): ?float
+  private function resolveOpenAiTemperature(string $model, float $configuredTemperature): ?float
   {
     if (preg_match('/^gpt-5/i', $model)) {
       return null;
     }
 
-    return 0.7;
+    return $configuredTemperature;
+  }
+
+  private function extractOpenAiSummary(array $decoded): string
+  {
+    if (!isset($decoded['choices'][0]['message']) || !is_array($decoded['choices'][0]['message'])) {
+      return '';
+    }
+
+    $message = $decoded['choices'][0]['message'];
+    if (!isset($message['content'])) {
+      return '';
+    }
+
+    $content = $message['content'];
+    if (is_string($content)) {
+      return $content;
+    }
+
+    if (!is_array($content)) {
+      return '';
+    }
+
+    $parts = array();
+    foreach ($content as $fragment) {
+      if (is_array($fragment)) {
+        if (isset($fragment['text']) && is_string($fragment['text'])) {
+          $parts[] = $fragment['text'];
+          continue;
+        }
+        if (isset($fragment['output_text']) && is_string($fragment['output_text'])) {
+          $parts[] = $fragment['output_text'];
+          continue;
+        }
+        if (isset($fragment['type'], $fragment['content']) && is_string($fragment['content'])) {
+          $parts[] = $fragment['content'];
+          continue;
+        }
+        if (isset($fragment['content']) && is_array($fragment['content'])) {
+          foreach ($fragment['content'] as $nested) {
+            if (is_array($nested) && isset($nested['text']) && is_string($nested['text'])) {
+              $parts[] = $nested['text'];
+            } elseif (is_string($nested)) {
+              $parts[] = $nested;
+            }
+          }
+          continue;
+        }
+      } elseif (is_string($fragment)) {
+        $parts[] = $fragment;
+      }
+    }
+
+    return trim(implode("\n", $parts));
+  }
+
+  private function extractOpenAiRefusal(array $decoded): ?string
+  {
+    if (!isset($decoded['choices'][0]['message']) || !is_array($decoded['choices'][0]['message'])) {
+      return null;
+    }
+
+    $message = $decoded['choices'][0]['message'];
+    if (!isset($message['refusal'])) {
+      return null;
+    }
+
+    $refusal = $message['refusal'];
+    if (is_array($refusal) && isset($refusal['text']) && is_string($refusal['text'])) {
+      $refusal = $refusal['text'];
+    }
+
+    if (!is_string($refusal)) {
+      return null;
+    }
+
+    $refusal = trim($refusal);
+    if ($refusal === '') {
+      return null;
+    }
+
+    return $refusal;
+  }
+
+  private function normalizeTemperature($value): float
+  {
+    if (!is_numeric($value)) {
+      return 0.7;
+    }
+
+    $temperature = (float)$value;
+    if ($temperature < 0) {
+      $temperature = 0.0;
+    } elseif ($temperature > 2) {
+      $temperature = 2.0;
+    }
+
+    return $temperature;
+  }
+
+  private function normalizeMaxTokens($value): int
+  {
+    if (!is_numeric($value)) {
+      return 2048;
+    }
+
+    $tokens = (int)$value;
+    if ($tokens < 1) {
+      return 0;
+    }
+
+    return $tokens;
   }
 
   private function htmlToMarkdown($content)
