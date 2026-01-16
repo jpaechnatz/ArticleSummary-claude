@@ -63,17 +63,11 @@ async function summarizeButtonClick(target) {
   var url = target.dataset.request;
   var entryId = target.dataset.entryId;
 
-  console.log('Request URL:', url);
-  console.log('Entry ID:', entryId);
-  console.log('CSRF Token:', context.csrf);
-
   // Convert to URLSearchParams for form-encoded data
   var data = new URLSearchParams();
   data.append('ajax', 'true');
   data.append('_csrf', context.csrf);
   data.append('id', entryId);
-
-  console.log('POST data:', data.toString());
 
   try {
     const response = await axios.post(url, data, {
@@ -83,14 +77,7 @@ async function summarizeButtonClick(target) {
       }
     });
 
-    console.log('PHP Response:', response);
     const xresp = response.data;
-    console.log('Parsed Response:', xresp);
-    console.log('Response structure check:', {
-      hasResponse: !!xresp.response,
-      hasData: !!(xresp.response && xresp.response.data),
-      fullStructure: JSON.stringify(xresp, null, 2)
-    });
 
     if (response.status !== 200 || !xresp.response || !xresp.response.data) {
       console.error('Invalid response structure:', xresp);
@@ -101,15 +88,11 @@ async function summarizeButtonClick(target) {
       console.error('Configuration error:', xresp.response.data);
       setOaiState(container, 2, xresp.response.data, null);
     } else {
-      // Parse parameters returned by PHP
-      const oaiParams = xresp.response.data;
-      const oaiProvider = xresp.response.provider;
-      console.log('Provider:', oaiProvider, 'Params:', oaiParams);
-      if (oaiProvider === 'openai') {
-        await sendOpenAIRequest(container, oaiParams);
-      } else {
-        await sendOllamaRequest(container, oaiParams);
+      const summary = xresp.response.data.summary || '';
+      if (!summary) {
+        throw new Error('Request Failed: Missing summary content');
       }
+      setOaiState(container, 0, 'finish', marked.parse(summary));
     }
   } catch (error) {
     console.error('Full error details:', error);
@@ -117,7 +100,14 @@ async function summarizeButtonClick(target) {
     console.error('Error response:', error.response);
     let errorMsg = 'Request Failed';
     if (error.response) {
-      errorMsg += ': ' + (error.response.statusText || error.response.status);
+      const statusLabel = error.response.statusText || error.response.status;
+      if (statusLabel) {
+        errorMsg += ': ' + statusLabel;
+      }
+      const serverData = error.response.data;
+      if (serverData && serverData.response && serverData.response.data) {
+        errorMsg = serverData.response.data;
+      }
     } else if (error.message) {
       errorMsg += ': ' + error.message;
     }
@@ -125,147 +115,3 @@ async function summarizeButtonClick(target) {
   }
 }
 
-async function sendOpenAIRequest(container, oaiParams) {
-  try {
-    let body = {...oaiParams};
-    delete body['oai_url'];
-    delete body['oai_key'];
-    body.stream = true; // Enable streaming
-
-    console.log('Sending request to:', oaiParams.oai_url);
-    console.log('Request body:', body);
-
-    const response = await fetch(oaiParams.oai_url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${oaiParams.oai_key}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    console.log('API Response status:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error Response:', errorText);
-      throw new Error('API Request Failed: ' + response.status + ' ' + errorText.substring(0, 100));
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let fullText = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        setOaiState(container, 0, 'finish', null);
-        break;
-      }
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Process Server-Sent Events format
-      let endIndex;
-      while ((endIndex = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, endIndex).trim();
-        buffer = buffer.slice(endIndex + 1);
-
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6); // Remove 'data: ' prefix
-
-          if (data === '[DONE]') {
-            setOaiState(container, 0, 'finish', null);
-            break;
-          }
-
-          try {
-            const json = JSON.parse(data);
-            const content = json.choices?.[0]?.delta?.content || '';
-            if (content) {
-              fullText += content;
-              setOaiState(container, 0, null, marked.parse(fullText));
-            }
-          } catch (e) {
-            console.error('Error parsing SSE JSON:', e, 'Data:', data);
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('OpenAI/Mistral API Error:', error);
-    let errorMsg = 'API Request Failed';
-    if (error.message) {
-      errorMsg = error.message;
-    }
-    setOaiState(container, 2, errorMsg, null);
-  }
-}
-
-
-async function sendOllamaRequest(container, oaiParams){
-  try {
-    let body = {...oaiParams};
-    delete body['oai_url'];
-    delete body['oai_key'];
-
-    console.log('Sending Ollama request to:', oaiParams.oai_url);
-    console.log('Request body:', body);
-
-    const response = await fetch(oaiParams.oai_url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${oaiParams.oai_key}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    console.log('Ollama Response status:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Ollama Error Response:', errorText);
-      throw new Error('Ollama Request Failed: ' + response.status + ' ' + errorText.substring(0, 100));
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let text = '';
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        setOaiState(container, 0, 'finish', null);
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      // Try to process complete JSON objects from the buffer
-      let endIndex;
-      while ((endIndex = buffer.indexOf('\n')) !== -1) {
-        const jsonString = buffer.slice(0, endIndex).trim();
-        try {
-          if (jsonString) {
-            const json = JSON.parse(jsonString);
-            text += json.response
-            setOaiState(container, 0, null, marked.parse(text));
-          }
-        } catch (e) {
-          // If JSON parsing fails, output the error and keep the chunk for future attempts
-          console.error('Error parsing JSON:', e, 'Chunk:', jsonString);
-        }
-        // Remove the processed part from the buffer
-        buffer = buffer.slice(endIndex + 1); // +1 to remove the newline character
-      }
-    }
-  } catch (error) {
-    console.error('Ollama API Error:', error);
-    let errorMsg = 'API Request Failed';
-    if (error.message) {
-      errorMsg = error.message;
-    }
-    setOaiState(container, 2, errorMsg, null);
-  }
-}

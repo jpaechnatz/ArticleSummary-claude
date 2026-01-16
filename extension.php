@@ -13,7 +13,7 @@ class ArticleSummaryExtension extends Minz_Extension
   public function init()
   {
     $this->registerHook('entry_before_display', array($this, 'addSummaryButton'));
-    $this->registerController('articlesummary');
+    $this->registerController('ArticleSummary');
     Minz_View::appendStyle($this->getFileUrl('style.css', 'css'));
     Minz_View::appendScript($this->getFileUrl('axios.js', 'js'));
     Minz_View::appendScript($this->getFileUrl('marked.js', 'js'));
@@ -23,9 +23,9 @@ class ArticleSummaryExtension extends Minz_Extension
   public function addSummaryButton($entry)
   {
     // Generate URL for extension action
-    // Use the extension controller pattern: ?c=articlesummary&a=summarize
-    // This routes to Controllers/articlesummaryController.php
-    $url_summary = _url('articlesummary', 'summarize');
+    // Use the extension controller pattern: ?c=ArticleSummary&a=summarize
+    // This routes to Controllers/ArticleSummaryController.php
+    $url_summary = _url('ArticleSummary', 'summarize', 'ajax', '1');
 
     $entry->_content(
       '<div class="oai-summary-wrap">'
@@ -39,30 +39,86 @@ class ArticleSummaryExtension extends Minz_Extension
 
   public function handleConfigureAction()
   {
-    if (Minz_Request::isPost()) {
-      $oai_url = trim(Minz_Request::param('oai_url', ''));
-      $oai_key = trim(Minz_Request::param('oai_key', ''));
-      $oai_model = trim(Minz_Request::param('oai_model', ''));
-      $oai_prompt = trim(Minz_Request::param('oai_prompt', ''));
-      $oai_provider = Minz_Request::param('oai_provider', 'openai');
+    parent::handleConfigureAction();
 
-      // Validate URL format
-      if (!empty($oai_url) && !filter_var($oai_url, FILTER_VALIDATE_URL)) {
-        // Invalid URL, don't save
-        return;
+    if (!Minz_Request::isPost()) {
+      return;
+    }
+
+    $currentConfig = $this->getUserConfiguration();
+
+    $oai_url = trim((string)Minz_Request::param('oai_url', ''));
+    $oai_key_param = Minz_Request::param('oai_key', null);
+    $oai_model = trim((string)Minz_Request::param('oai_model', ''));
+    $oai_prompt = trim((string)Minz_Request::param('oai_prompt', ''));
+    $oai_provider = strtolower(trim((string)Minz_Request::param('oai_provider', 'openai')));
+    $clear_oai_key = Minz_Request::paramBoolean('clear_oai_key');
+    $oai_temperature_param = trim((string)Minz_Request::param('oai_temperature', ''));
+    $oai_max_tokens_param = trim((string)Minz_Request::param('oai_max_tokens', ''));
+
+    // Validate URL format
+    if (!empty($oai_url) && !filter_var($oai_url, FILTER_VALIDATE_URL)) {
+      // Invalid URL, don't save
+      return;
+    }
+
+    // Validate provider is one of the allowed values
+    if (!in_array($oai_provider, ['openai', 'mistral', 'ollama'], true)) {
+      $oai_provider = 'openai';
+    }
+
+    $config = $currentConfig;
+    $config['oai_url'] = $oai_url;
+    if ($clear_oai_key) {
+      $config['oai_key'] = '';
+    } elseif ($oai_key_param !== null && trim((string)$oai_key_param) !== '') {
+      $config['oai_key'] = trim((string)$oai_key_param);
+    }
+    $config['oai_model'] = $oai_model;
+    $config['oai_prompt'] = $oai_prompt;
+    $config['oai_provider'] = $oai_provider;
+
+    if ($oai_temperature_param === '' || $oai_temperature_param === null) {
+      $config['oai_temperature'] = null;
+    } else {
+      $temperature = (float)$oai_temperature_param;
+      if ($temperature < 0) {
+        $temperature = 0.0;
+      } elseif ($temperature > 2) {
+        $temperature = 2.0;
       }
+      $config['oai_temperature'] = $temperature;
+    }
 
-      // Validate provider is one of the allowed values
-      if (!in_array($oai_provider, ['openai', 'ollama'])) {
-        $oai_provider = 'openai';
+    if ($oai_max_tokens_param === '' || $oai_max_tokens_param === null) {
+      $config['oai_max_tokens'] = null;
+    } else {
+      $maxTokens = (int)$oai_max_tokens_param;
+      if ($maxTokens < 0) {
+        $maxTokens = 0;
       }
+      $config['oai_max_tokens'] = $maxTokens;
+    }
 
-      FreshRSS_Context::$user_conf->oai_url = $oai_url;
-      FreshRSS_Context::$user_conf->oai_key = $oai_key;
-      FreshRSS_Context::$user_conf->oai_model = $oai_model;
-      FreshRSS_Context::$user_conf->oai_prompt = $oai_prompt;
-      FreshRSS_Context::$user_conf->oai_provider = $oai_provider;
-      FreshRSS_Context::$user_conf->save();
+    $this->setUserConfiguration($config);
+
+    $userConf = FreshRSS_Context::userConf();
+    if ($userConf !== null) {
+      $map = array(
+        'oai_url',
+        'oai_model',
+        'oai_prompt',
+        'oai_provider',
+        'oai_key',
+        'oai_temperature',
+        'oai_max_tokens',
+      );
+      foreach ($map as $key) {
+        if (array_key_exists($key, $config)) {
+          $userConf->$key = $config[$key];
+        }
+      }
+      $userConf->save();
     }
   }
 }

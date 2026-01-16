@@ -1,9 +1,21 @@
 <?php
-$oai_url = FreshRSS_Context::$user_conf->oai_url;
-$oai_key = FreshRSS_Context::$user_conf->oai_key;
-$oai_model = FreshRSS_Context::$user_conf->oai_model;
-$oai_prompt = FreshRSS_Context::$user_conf->oai_prompt;
-$oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Default to OpenAI
+$oai_url = (string)$this->getUserConfigurationValue('oai_url', '');
+$oai_key = (string)$this->getUserConfigurationValue('oai_key', '');
+$has_oai_key = $oai_key !== '';
+$oai_model = (string)$this->getUserConfigurationValue('oai_model', '');
+$oai_prompt = (string)$this->getUserConfigurationValue('oai_prompt', '');
+$oai_provider = (string)$this->getUserConfigurationValue('oai_provider', 'openai');
+if (!in_array($oai_provider, ['openai', 'mistral', 'ollama'], true)) {
+  $oai_provider = 'openai';
+}
+
+$raw_temperature = $this->getUserConfigurationValue('oai_temperature', null);
+$raw_max_tokens = $this->getUserConfigurationValue('oai_max_tokens', null);
+
+$display_temperature = ($raw_temperature === null || $raw_temperature === '') ? '' : (float)$raw_temperature;
+$display_max_tokens = ($raw_max_tokens === null || $raw_max_tokens === '' || (int)$raw_max_tokens === 0)
+  ? ''
+  : (int)$raw_max_tokens;
 ?>
 
 <form action="<?php echo _url('extension', 'configure', 'e', urlencode($this->getName())); ?>" method="post">
@@ -11,6 +23,7 @@ $oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Defau
   <label for="oai_provider">Choose AI Provider</label>
   <select name="oai_provider">
       <option value="openai" <?php echo ($oai_provider == 'openai' ? 'selected' : ''); ?>>OpenAI</option>
+      <option value="mistral" <?php echo ($oai_provider == 'mistral' ? 'selected' : ''); ?>>Mistral (OpenAI compatible)</option>
       <option value="ollama" <?php echo ($oai_provider == 'ollama' ? 'selected' : ''); ?>>Ollama</option>
    </select>
  
@@ -18,9 +31,39 @@ $oai_provider = FreshRSS_Context::$user_conf->oai_provider ?: 'openai'; // Defau
     <label for="oai_url">Base URL (http(s)://oai.com/) without 'v1'</label>
     <input type="text" name="oai_url" id="oai_url" value="<?php echo htmlspecialchars($oai_url, ENT_QUOTES, 'UTF-8'); ?>">
     <label for="oai_key">API Key</label>
-    <input type="text" name="oai_key" id="oai_key" value="<?php echo htmlspecialchars($oai_key, ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="password"
+           name="oai_key"
+           id="oai_key"
+           value=""
+           autocomplete="new-password"
+           placeholder="<?php echo $has_oai_key ? '••••••••' : ''; ?>">
+    <small>Leave blank to keep the existing key.</small>
+    <?php if ($has_oai_key) { ?>
+      <div class="oai-key-clear">
+        <label>
+          <input type="checkbox" name="clear_oai_key" value="1">
+          Remove stored key
+        </label>
+      </div>
+    <?php } ?>
     <label for="oai_model">Model Name</label>
     <input type="text" name="oai_model" id="oai_model" value="<?php echo htmlspecialchars($oai_model, ENT_QUOTES, 'UTF-8'); ?>">
+    <label for="oai_temperature">Temperature</label>
+    <input type="number"
+           step="0.1"
+           min="0"
+           max="2"
+           name="oai_temperature"
+           id="oai_temperature"
+           value="<?php echo htmlspecialchars($display_temperature, ENT_QUOTES, 'UTF-8'); ?>">
+    <small>Leave empty to use the provider default. Some OpenAI GPT-5 models require the default temperature of 1.0 and will ignore other values.</small>
+    <label for="oai_max_tokens">Max tokens</label>
+    <input type="number"
+           min="0"
+           name="oai_max_tokens"
+           id="oai_max_tokens"
+           value="<?php echo htmlspecialchars($display_max_tokens, ENT_QUOTES, 'UTF-8'); ?>">
+    <small>Leave empty or set 0 to let the provider decide.</small>
     <label for="oai_prompt">Prompt (add before content)</label>
     <textarea name="oai_prompt" id="oai_prompt"><?php echo htmlspecialchars($oai_prompt, ENT_QUOTES, 'UTF-8'); ?></textarea>
   </div>
